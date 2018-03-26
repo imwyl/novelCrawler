@@ -2,45 +2,83 @@ package novelcrawler
 
 import (
 	"fmt"
+	"log"
+	"strings"
 )
 
-// Chstonum returns the uint number of chinese number, 
-// if unexpected number presents, or larger than 99999999, 
+// Chstonum returns the uint number of chinese number,
+// if unexpected number presents, or larger than 99999999,
 // an error will be returned
 func Chstonum(strnum string) (result int, err error) {
-	tmp := -1
+	var method func(int, *int)
+	var containsBits bool
+	if strings.Contains(strnum, "百") ||
+		strings.Contains(strnum, "千") ||
+		strings.Contains(strnum, "万") ||
+		strings.Contains(strnum, "十") {
+		method = withbits()
+		containsBits = true
+	} else {
+		method = withoutbits()
+		containsBits = false
+	}
+	pos := 0
 	for _, ch := range strnum {
-		pos, err := positionOf(ch)	
+		pos, err = positionOf(ch)
 		if err != nil {
 			return pos, err
 		}
-		if pos == 0 {	// 零
-			tmp = -1
-		} else if pos > 0 && pos < 10{ // 一 ~ 九
-			tmp = pos
-		} else if pos >= 10 && pos < 10000{ // 十， 百， 千
-			if tmp <= 0 && result == 0{
-				tmp = 1
-			}
-			result += tmp * pos
-			tmp = -1
-		} else { // 万
-			// if the number before 10000(万) is zero, it's a illegal number
-			if result == 0 && tmp <= 0{
-				return -1, fmt.Errorf("Illegal number %v", strnum)
-			} else if tmp > 0 {
-				result += tmp
-			}
-			result *= pos
+		method(pos, &result)
+		if result == -1 {
+			log.Fatalf("Error: unexpcted number: %v(%v)", strnum, ch)
+			return -1, fmt.Errorf("Error: unexpcted number: %v(%v)", strnum, ch)
 		}
 	}
-	if tmp != -1 {
-		result += tmp
+	if containsBits && pos != 0 {
+		result += pos
 	}
 	return
 }
 
-// positionOf return the position of a rune, 
+func withbits() func(int, *int) {
+	tmp := -1
+	return func(pos int, result *int) {
+		if pos == 0 {
+			tmp = -1
+		} else if pos > 0 && pos < 10 {
+			tmp = pos
+		} else if pos >= 10 && pos < 10000 {
+			if tmp < 0 && *result <= 0 {
+				tmp = 1
+			}
+			*result += (tmp * pos)
+			tmp = -1
+		} else {
+			if *result == 0 && tmp <= 0 {
+				*result = -1
+			} else if tmp > 0 {
+				*result += tmp
+			}
+			*result *= pos
+			tmp = -1
+		}
+	}
+}
+
+func withoutbits() func(int, *int) {
+	return func(pos int, result *int) {
+		if pos == 0 {
+			*result *= 10
+		} else if pos > 0 && pos < 10 {
+			*result *= 10
+			*result += pos
+		} else {
+			*result = -1
+		}
+	}
+}
+
+// positionOf return the position of a rune,
 // if not in the slice, return an error
 func positionOf(ch rune) (int, error) {
 	if ch == '两' {
