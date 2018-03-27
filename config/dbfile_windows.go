@@ -11,9 +11,13 @@ func getdbname() string {
 }
 
 func getdbpath() string {
-	return os.Getenv("APPDATA")
+	return os.Getenv("APPDATA") + "\\novelCrawler\\"
 }
 
 func getabspath() string {
-	return getdbpath() + "\\" + getdbname()
+	return Getdbpath() + getdbname()
+}
+
+func getTempDir() string {
+	return os.Getenv("TEMP") + "\\colly-cache"
 }

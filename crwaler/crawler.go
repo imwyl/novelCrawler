@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/gocolly/colly"
+	"github.com/imwyl/novelCrawler/config"
 	"github.com/imwyl/novelCrawler/dao"
 )
 
 var chapterRegex, _ = regexp.Compile("第([一二三四五六七八九零十百千万]+)[章|节]\\s(.*)")
 var titleRegex, _ = regexp.Compile("^(.*)最新章节$")
 var chapterURLRegex, err = regexp.Compile("(\\d+)")
+var tempDir = novelcrawler.GetTempDir()
 
 func getChapterOrder(chapterURL string) int {
 	if chapterURL == "" {
@@ -31,7 +33,7 @@ func getChapterOrder(chapterURL string) int {
 func initialize(URL string) {
 	var c = colly.NewCollector(
 		colly.AllowedDomains("www.piaotian.com", "piaotian.com"),
-		colly.CacheDir("/tmp/colly-cache"))
+		colly.CacheDir(tempDir))
 	d := c.Clone()
 
 	db, err := dao.GetDB()
@@ -43,18 +45,19 @@ func initialize(URL string) {
 	chapterNumber := getChapterOrder(chapter.ID)
 	fmt.Println(chapterNumber)
 	// get chapters of novel
-	// c.OnHTML("ul", func(e *colly.HTMLElement) {
-	// 	fmt.Println(chapter)
-	// 	e.ForEach("li", func(_ int, el *colly.HTMLElement) {
-	// 		if chapterRegex.MatchString(el.ChildText("a")) {
-	// 			chapterURL := el.ChildAttr("a", "href")
-	// 			if getChapterOrder(chapterURL) > chapterNumber {
-	// 				log.Printf("Visiting %s\n", chapterURL)
-	// 				// d.Visit(e.Request.AbsoluteURL(el.ChildAttr("a", "href")))
-	// 			}
-	// 		}
-	// 	})
-	// })
+	c.OnHTML("ul", func(e *colly.HTMLElement) {
+		fmt.Println(chapter)
+		e.ForEach("li", func(_ int, el *colly.HTMLElement) {
+			if chapterRegex.MatchString(el.ChildText("a")) {
+				chapterURL := el.ChildAttr("a", "href")
+				if getChapterOrder(chapterURL) > chapterNumber {
+					log.Printf("Visiting %s\n", chapterURL)
+					// TODO add chapter processor
+					d.Visit(e.Request.AbsoluteURL(el.ChildAttr("a", "href")))
+				}
+			}
+		})
+	})
 
 	// get content of novel
 	d.OnHTML("div#main", func(e *colly.HTMLElement) {
@@ -86,24 +89,22 @@ func novelExits(URL string, boolChan chan bool) {
 		log.Fatalln("Can not open databse:\n", err)
 		panic(err)
 	}
-	URL = strings.Replace(URL, "/index.html", "", 1)
 	fmt.Println(URL)
 	novel := dao.Novel{ID: URL}
 	defer db.Close()
-	novelExist, err := novel.Exists()
-	fmt.Println("Database exists", novelExist)
 	if err != nil {
 		log.Fatalln(err)
 		boolChan <- false
 		panic(err)
 	}
-	if novelExist {
+	if dao.RecordExists(&novel) {
 		boolChan <- true
 		return
 	}
 	var c = colly.NewCollector(
 		colly.AllowedDomains("www.piaotian.com", "piaotian.com"),
-		colly.CacheDir("/tmp/colly-cache"))
+		colly.CacheDir(tempDir))
+	var novelExist bool
 	c.OnResponse(func(res *colly.Response) {
 		log.Println("Response recived")
 		novelExist = res.StatusCode == 200
@@ -133,9 +134,17 @@ func novelExits(URL string, boolChan chan bool) {
 
 // Start the crawler
 func Start(URL string) {
+	modifyURL(&URL)
 	boolChan := make(chan bool)
 	go novelExits(URL, boolChan)
 	if exists := <-boolChan; exists {
 		initialize(URL)
 	}
+}
+
+func modifyURL(URL *string) {
+	if !strings.Contains(*URL, "https://www.") {
+		*URL = "https://www." + *URL
+	}
+	*URL = strings.Replace(*URL, "/index.html", "", 1)
 }

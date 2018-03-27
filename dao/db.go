@@ -20,14 +20,8 @@ type Chapter struct {
 	ID      string `gorm:"primary_key; auto_increment:false"`
 	Name    string
 	NovelID string	`gorm:"not null"`
-	Content string `grom:"type:text"`
+	Content string `gorm:"type:Text(100000)"`
 	Orders  uint   `gorm:"not null"`
-}
-
-// ExistQuery an interface of dao
-type ExistQuery interface {
-	// Exists returns whether a entity exists or not
-	Exists() (bool, error)
 }
 
 // GetDB returns a database connection
@@ -36,23 +30,13 @@ func GetDB() (db *gorm.DB, err error) {
 	return
 }
 
-// Exists returns whether a chapter exists or not
-func (chapter *Chapter) Exists() (bool, error) {
-	db, err := GetDB()
-	if err != nil {
-		return false, err
-	}
-	defer db.Close()
-	return !db.NewRecord(chapter), nil
-}
-
 // Save a chapter entity
 func (chapter *Chapter) Save() (bool, error) {
 	db, err := GetDB()
 	if err != nil {
 		return false, err
 	}
-	if exits, err := chapter.Exists(); !exits && err != nil {
+	if db.NewRecord(chapter) {
 		db.Create(chapter)
 	}
 	db.Find(chapter)
@@ -62,12 +46,14 @@ func (chapter *Chapter) Save() (bool, error) {
 	return true, nil
 }
 
-// Exists returns whether a novel exists or not
-func (novel *Novel) Exists() (bool, error) {
+// RecordExists check a record exists or not
+func RecordExists(value interface{}) bool {
 	db, err := GetDB()
 	if err != nil {
-		return false, err
+		panic(err)
 	}
 	defer db.Close()
-	return !db.NewRecord(novel), nil
+	var count int
+	db.Find(value).Count(&count)
+	return count > 0
 }

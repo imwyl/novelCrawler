@@ -7,13 +7,17 @@ import (
 )
 
 func getabspath() string {
-	return getdbpath() + "/" + getdbname()
+	return getdbpath() + getdbname()
 }
 
 func getdbname() string {
-	return ".novel.db"
+	return "novel.db"
 }
 
 func getdbpath() string {
-	return os.Getenv("HOME")
+	return os.Getenv("HOME") + "/.novelCrawler/"
+}
+
+func getTempDir() string {
+	return "/tmp/colly-cache"
 }

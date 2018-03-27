@@ -1,10 +1,11 @@
 package main
 
 import (
-	"log"
-	"github.com/imwyl/novelCrawler/dao"
 	"flag"
 	"fmt"
+	"log"
+
+	"github.com/imwyl/novelCrawler/dao"
 
 	"github.com/imwyl/novelCrawler/crwaler"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
@@ -16,9 +17,9 @@ func main() {
 	flag.Parse()
 	if URL == "" {
 		fmt.Println("No URL")
-	} else {
-		crwaler.Start(URL)
+		return
 	}
+	
 	db, err := dao.GetDB()
 	if err != nil {
 		log.Fatalln(err)
@@ -26,4 +27,5 @@ func main() {
 	}
 	defer db.Close()
 	db.AutoMigrate(&dao.Chapter{}, &dao.Novel{})
+	crwaler.Start(URL)
 }

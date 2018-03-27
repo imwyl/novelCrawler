@@ -26,7 +26,7 @@ func TestGetdbpath(t *testing.T) {
 		name string
 		want string
 	}{
-		{"test2", "/home/wyl"},
+		{"test2", "C:\\Users\\IMwyl\\AppData\\Roaming\\novelCrawler\\"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -47,6 +47,22 @@ func TestGetabspath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := nc.Getabspath(); got != tt.want {
+				t.Errorf("Getabspath() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetTempDir(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"test3", "C:\\Users\\IMwyl\\AppData\\Local\\Temp\\colly-cache"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := nc.GetTempDir(); got != tt.want {
 				t.Errorf("Getabspath() = %v, want %v", got, tt.want)
 			}
 		})
