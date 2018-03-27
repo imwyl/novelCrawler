@@ -90,10 +90,10 @@ func positionOf(ch rune) (int, error) {
 			return pos, nil
 		}
 	}
-	return bits(ch)
+	return bitToNumber(ch)
 }
 
-func bits(ch rune) (result int, err error) {
+func bitToNumber(ch rune) (result int, err error) {
 	switch ch {
 	case '十':
 		result = 10
@@ -107,4 +107,36 @@ func bits(ch rune) (result int, err error) {
 		return -1, fmt.Errorf("Unexpcted chinese number: %v", ch)
 	}
 	return
+}
+
+// NumberToChs converts int number to chinese number
+func NumberToChs(number int) string {
+	chs := []string{"", "十", "百", "千", "万"}
+	chsnums := []string{"零", "一", "二", "三", "四", "五", "六", "七", "八", "九"}
+	var result string
+	current := -1
+	last := -1
+	for index := 0; number > 0; index = (index + 1) % len(chs) {
+		if current != -1 {
+			last = current
+			if index == 0 {
+				index = 1
+			}
+		}
+		current = number % 10
+		number /= 10
+		if current == 0 && (last == -1 || last == 0) {
+			if index == 4 {
+				result += chs[index]
+			}
+			continue
+		} else if current == 0 && index != 4 {
+			result = chsnums[current] + result
+		} else if current == 0 && index == 4 {
+			result = chs[index] + chsnums[current] + result
+		} else {
+			result = chsnums[current] + chs[index] + result
+		}
+	}
+	return result
 }

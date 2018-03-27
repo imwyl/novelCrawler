@@ -1,8 +1,9 @@
 package novelcrawler
 
 import (
-	"github.com/imwyl/novelCrawler/pkg/novelCrawler"
 	"testing"
+
+	"github.com/imwyl/novelCrawler/pkg/novelCrawler"
 )
 
 func TestChstonum(t *testing.T) {
@@ -18,7 +19,7 @@ func TestChstonum(t *testing.T) {
 		{"0", args{"零"},
 			0, false},
 		{"1", args{"一"},
-			1, false},	
+			1, false},
 		{"2", args{"十二"},
 			12, false},
 		{"3", args{"一百零三"},
@@ -31,7 +32,7 @@ func TestChstonum(t *testing.T) {
 			6078, false},
 		{"5-3", args{"六千零一"},
 			6001, false},
-		{"5-2", args{"六零七八"}, 
+		{"5-2", args{"六零七八"},
 			6078, false},
 		{"6", args{"九千一百零二"},
 			9102, false},
@@ -55,7 +56,6 @@ func TestChstonum(t *testing.T) {
 			1234567, false},
 		{"err", args{"第一章"},
 			-1, true},
-
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -66,6 +66,42 @@ func TestChstonum(t *testing.T) {
 			}
 			if gotResult != tt.wantResult {
 				t.Errorf("Chstonum() = %v, want %v", gotResult, tt.wantResult)
+			}
+		})
+	}
+}
+
+func TestNumberToChs(t *testing.T) {
+	type args struct {
+		number int
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{"1", args{1200}, "一千二百"},
+		{"2", args{10}, "一十"},
+		{"3", args{14}, "一十四"},
+		{"4", args{20}, "二十"},
+		{"5", args{100}, "一百"},
+		{"6", args{104}, "一百零四"},
+		{"7", args{112}, "一百一十二"},
+		{"8", args{130}, "一百三十"},
+		{"9", args{1000}, "一千"},
+		{"10", args{1002}, "一千零二"},
+		{"11", args{1030}, "一千零三十"},
+		{"12", args{4056}, "四千零五十六"},
+		{"13", args{7890}, "七千八百九十"},
+		{"14", args{1200}, "一千二百"},
+		{"15", args{102345}, "一十万零二千三百四十五"},
+		{"16", args{40000}, "四万"},
+		{"17", args{500000}, "五十万"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := novelcrawler.NumberToChs(tt.args.number); got != tt.want {
+				t.Errorf("NumberToChs() = %v, want %v", got, tt.want)
 			}
 		})
 	}
