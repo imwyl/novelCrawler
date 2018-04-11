@@ -9,24 +9,24 @@ import (
 
 // Novel the novels
 type Novel struct {
-	ID       string `grom:"primary_key; auto_increment:false"`
-	Name     string `gorm:"type:varchar(100);not null"`
-	Chapters []Chapter	`grom:"foreignkey:NovelID"`
-	UpdateAt time.Time `gorm:"not null"`
+	ID			string		`grom:"primary_key; auto_increment:false"`
+	Name		string		`gorm:"type:varchar(100);not null"`
+	Chapters	[]Chapter	`gorm:"foreignkey:NovelID"`
+	First		int			`gorm:"not null"`
+	UpdateAt	time.Time	`gorm:"not null"`
 }
 
 // Chapter the chapters of volumn
 type Chapter struct {
-	ID      string `gorm:"primary_key; auto_increment:false"`
+	ID      uint	`gorm:"primary_key;auto_increment:false"`
 	Name    string
-	NovelID string	`gorm:"not null"`
+	NovelID string `gorm:"not null"`
 	Content string `gorm:"type:Text(100000)"`
-	Orders  uint   `gorm:"not null"`
 }
 
 // GetDB returns a database connection
 func GetDB() (db *gorm.DB, err error) {
-	db, err = gorm.Open("sqlite3", novelcrawler.Getabspath())
+	db, err = gorm.Open("sqlite3", config.Getabspath())
 	return
 }
 
@@ -36,24 +36,26 @@ func (chapter *Chapter) Save() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if db.NewRecord(chapter) {
+	var count int
+	if db.Model(chapter).Where("id = ?", chapter.ID).Count(&count); count == 0 {
 		db.Create(chapter)
+	} else {
+		db.Save(chapter)
 	}
-	db.Find(chapter)
 	var novel Novel
 	db.Model(chapter).Related(&novel)
-	db.Save(&novel)
+	db.Model(&novel).Update("update_at", time.Now())
 	return true, nil
 }
 
-// RecordExists check a record exists or not
-func RecordExists(value interface{}) bool {
+// NovelExists check a record exists or not
+func NovelExists(id string) bool {
 	db, err := GetDB()
 	if err != nil {
 		panic(err)
 	}
 	defer db.Close()
 	var count int
-	db.Find(value).Count(&count)
+	db.Model(&Novel{}).Where("id = ?", id).Count(&count)
 	return count > 0
 }

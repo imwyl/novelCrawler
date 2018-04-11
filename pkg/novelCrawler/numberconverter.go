@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Chstonum returns the uint number of chinese number,
+// Chstonum returns the int number of chinese number,
 // if unexpected number presents, or larger than 99999999,
 // an error will be returned
 func Chstonum(strnum string) (result int, err error) {

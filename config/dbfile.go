@@ -1,4 +1,4 @@
-package novelcrawler
+package config
 
 import (
 	"log"

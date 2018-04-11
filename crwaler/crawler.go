@@ -1,39 +1,49 @@
 package crwaler
 
 import (
-	"fmt"
 	"log"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/gocolly/colly"
 	"github.com/imwyl/novelCrawler/config"
+	"github.com/imwyl/novelCrawler/pkg/novelCrawler"
+
+	"github.com/gocolly/colly"
 	"github.com/imwyl/novelCrawler/dao"
 )
 
-var chapterRegex, _ = regexp.Compile("第([一二三四五六七八九零十百千万]+)[章|节]\\s(.*)")
-var titleRegex, _ = regexp.Compile("^(.*)最新章节$")
-var chapterURLRegex, err = regexp.Compile("(\\d+)")
-var tempDir = novelcrawler.GetTempDir()
+var chapterRegex, _ = regexp.Compile("(第[一二三四五六七八九零十百千万]+[章|节]\\s+.*)")
+var novelNameRegex, _ = regexp.Compile("^(.*)最新章节$")
+var novelURIRegex, _ = regexp.Compile(`\d+/\d+`)
+var chapterURLRegex, _ = regexp.Compile("(\\d+)\\.html")
+var firstChapterRegex, _ = regexp.Compile(`<a href="(\d+).html">第一[章|节]`)
+var tempDir = config.GetTempDir()
 
-func getChapterOrder(chapterURL string) int {
+func getChapterNumber(chapterURL string) int {
 	if chapterURL == "" {
 		return -1
 	}
-	chapterNumber := chapterURLRegex.FindString(chapterURL)
-	result, err := strconv.Atoi(chapterNumber)
+	chapterNumberArr := chapterURLRegex.FindStringSubmatch(chapterURL)
+	if len(chapterNumberArr) <= 1 {
+		log.Fatalln(chapterURL)
+		return -1
+	}
+	result, err := strconv.Atoi(chapterNumberArr[1])
 	if err != nil {
 		return -1
 	}
 	return result
 }
 
-func initialize(URL string) {
+func getChapters(URL string) {
 	var c = colly.NewCollector(
-		colly.AllowedDomains("www.piaotian.com", "piaotian.com"),
+		colly.AllowedDomains("piaotian.net", "www.piaotian.net", "www.piaotian.com", "piaotian.com" ),
 		colly.CacheDir(tempDir))
+	c.Limit(&colly.LimitRule{
+		Parallelism: 5,
+	})
 	d := c.Clone()
 
 	db, err := dao.GetDB()
@@ -41,18 +51,24 @@ func initialize(URL string) {
 		log.Fatalln(err)
 	}
 	var chapter dao.Chapter
-	db.Where("novel_id = ?", URL).Order("orders desc").First(&chapter)
-	chapterNumber := getChapterOrder(chapter.ID)
-	fmt.Println(chapterNumber)
+	novel := dao.Novel{ID: getNovelURI(URL)}
+	db.First(&novel)
+	db.Where("novel_id = ?", novel.ID).Order("orders desc").First(&chapter)
+	chapterMap := make(map[int]*dao.Chapter)
 	// get chapters of novel
 	c.OnHTML("ul", func(e *colly.HTMLElement) {
-		fmt.Println(chapter)
 		e.ForEach("li", func(_ int, el *colly.HTMLElement) {
 			if chapterRegex.MatchString(el.ChildText("a")) {
 				chapterURL := el.ChildAttr("a", "href")
-				if getChapterOrder(chapterURL) > chapterNumber {
-					log.Printf("Visiting %s\n", chapterURL)
-					// TODO add chapter processor
+				if thisChapter := getChapterNumber(chapterURL); thisChapter-novel.First+1 > int(chapter.ID) {
+					if chapterMap[thisChapter] == nil {
+						chapterMap[thisChapter] = &dao.Chapter{
+							ID:      uint(thisChapter),
+							NovelID: novel.ID,
+							Name:    chapterRegex.FindStringSubmatch(el.ChildText("a"))[1],
+						}
+						log.Printf("Add %d %v to map", thisChapter, chapterMap[thisChapter])
+					}
 					d.Visit(e.Request.AbsoluteURL(el.ChildAttr("a", "href")))
 				}
 			}
@@ -61,71 +77,77 @@ func initialize(URL string) {
 
 	// get content of novel
 	d.OnHTML("div#main", func(e *colly.HTMLElement) {
-		//fmt.Println(strings.Replace(e.Text, "\u00a0\u00a0\u00a0\u00a0", "<p>", -1))
-	})
-
-	// get volume and chapter of novel
-	d.OnHTML("h1", func(e *colly.HTMLElement) {
-		fmt.Println(chapterRegex.FindStringSubmatch(e.Text))
+		requestURL := chapterURLRegex.FindStringSubmatch(e.Request.URL.String())[1]
+		chapterURL := getChapterNumber(requestURL)
+		thisChapter := chapterMap[chapterURL]
+		log.Println("div#main", thisChapter)
+		thisChapter.Content = strings.Replace(e.Text, "\u00a0\u00a0\u00a0\u00a0", "<p>", -1)
+		thisChapter.Save()
+		//log.Println()
 	})
 
 	// div#main is add by javascript, so add it here
 	d.OnResponse(func(res *colly.Response) {
 		res.Body = []byte(strings.Replace(string(res.Body), "<br>", "<div id=\"main\">", 1))
+		log.Println("Response code: ", string(res.Body))
 	})
 
 	c.Visit(URL)
 	c.Wait()
 
-	c.Limit(&colly.LimitRule{
-		Parallelism: 5,
-	})
 }
 
 // novelExits return the novel exits in database or not
-func novelExits(URL string, boolChan chan bool) {
-	db, err := dao.GetDB()
-	if err != nil {
-		log.Fatalln("Can not open databse:\n", err)
-		panic(err)
+func novelExists(URL string) bool {
+	novelURI := getNovelURI(URL)
+	log.Println(novelURI)
+	return dao.NovelExists(novelURI)
+}
+
+// createNovel create novel record in database
+func createNovel(URL string, boolChan chan novelcrawler.ErrorCode) {
+	log.Println("URL", URL)
+	db, getDbErr := dao.GetDB()
+	if getDbErr != nil {
+		log.Fatalln("Can not open databse:\n", getDbErr)
+		panic(getDbErr)
 	}
-	fmt.Println(URL)
-	novel := dao.Novel{ID: URL}
 	defer db.Close()
-	if err != nil {
-		log.Fatalln(err)
-		boolChan <- false
-		panic(err)
-	}
-	if dao.RecordExists(&novel) {
-		boolChan <- true
-		return
-	}
 	var c = colly.NewCollector(
-		colly.AllowedDomains("www.piaotian.com", "piaotian.com"),
+		colly.AllowedDomains("www.piaotian.com", "piaotian.com", "piaotian.net", "www.piaotian.net"),
 		colly.CacheDir(tempDir))
-	var novelExist bool
+	var remoteNovelExist bool
+	var firstChapter int
 	c.OnResponse(func(res *colly.Response) {
-		log.Println("Response recived")
-		novelExist = res.StatusCode == 200
+		remoteNovelExist = res.StatusCode == 200
+		if !remoteNovelExist {
+			boolChan <- novelcrawler.RemoteNotExist
+		} else {
+			firstChapterSlice := firstChapterRegex.FindStringSubmatch(string(res.Body))
+			if len(firstChapterSlice) <= 1 {
+				boolChan <- novelcrawler.InternalError
+			} else {
+				firstChapter, _ = strconv.Atoi(firstChapterSlice[1])
+			}
+		}
 	})
 	c.OnHTML("h1", func(e *colly.HTMLElement) {
 		h1title := e.Text
-		// get novel name and save to database
-		if novelName := titleRegex.FindStringSubmatch(h1title); len(novelName) != 0 && novelExist {
-			fmt.Println(novelName)
-			novel.Name = novelName[1]
-			novel.ID = URL
-			novel.UpdateAt = time.Now()
+		// get novel's name and save to database
+		if novelName := novelNameRegex.FindStringSubmatch(h1title); len(novelName) > 1 && remoteNovelExist {
+			log.Println(novelName)
+			novel := dao.Novel{
+				ID:       getNovelURI(URL),
+				Name:     novelName[1],
+				First:    firstChapter,
+				UpdateAt: time.Now(),
+			}
 			log.Println("create novel ", novel.Name)
 			db.Create(&novel)
-			boolChan <- novelExist
+			boolChan <- novelcrawler.Success
 		} else {
-			if err != nil {
-				log.Fatalln(err)
-				boolChan <- false
-			}
-			log.Println("novelExists ", novelExist)
+			boolChan <- novelcrawler.NovelName
+			log.Println("novelExists ", remoteNovelExist)
 		}
 	})
 	c.Visit(URL)
@@ -133,18 +155,30 @@ func novelExits(URL string, boolChan chan bool) {
 }
 
 // Start the crawler
-func Start(URL string) {
+func Start(URL string) novelcrawler.ErrorCode {
 	modifyURL(&URL)
-	boolChan := make(chan bool)
-	go novelExits(URL, boolChan)
-	if exists := <-boolChan; exists {
-		initialize(URL)
+	if !novelExists(URL) {
+		errorChan := make(chan novelcrawler.ErrorCode)
+		go createNovel(URL, errorChan)
+		if createResult := <-errorChan; createResult != novelcrawler.Success {
+			return createResult
+		}
 	}
+	getChapters(URL)
+	return novelcrawler.Success
 }
 
 func modifyURL(URL *string) {
 	if !strings.Contains(*URL, "https://www.") {
 		*URL = "https://www." + *URL
 	}
-	*URL = strings.Replace(*URL, "/index.html", "", 1)
+	if strings.HasSuffix(*URL, "/") {
+		*URL = string((*URL)[:len(*URL)-1])
+	} else {
+		*URL = strings.Replace(*URL, "/index.html", "", 1)
+	}
+}
+
+func getNovelURI(URL string) string {
+	return novelURIRegex.FindString(URL)
 }

@@ -1,8 +1,8 @@
 package main
 
 import (
+	"strings"
 	"flag"
-	"fmt"
 	"log"
 
 	"github.com/imwyl/novelCrawler/dao"
@@ -16,10 +16,11 @@ func main() {
 	flag.StringVar(&URL, "URL", "", "飘天小说地址")
 	flag.Parse()
 	if URL == "" {
-		fmt.Println("No URL")
+		log.Fatalln("No URL")
 		return
+	} else if !strings.Contains(URL, "piaotian") {
+		log.Fatalln("Incorrent URL")
 	}
-	
 	db, err := dao.GetDB()
 	if err != nil {
 		log.Fatalln(err)

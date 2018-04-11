@@ -1,6 +1,6 @@
 // +build windows 
 
-package novelcrawler
+package config
 
 import (
 	"os"
