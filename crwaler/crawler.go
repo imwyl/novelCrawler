@@ -11,6 +11,7 @@ import (
 	"github.com/imwyl/novelCrawler/pkg/novelCrawler"
 
 	"github.com/gocolly/colly"
+	"github.com/gocolly/colly/proxy"
 	"github.com/imwyl/novelCrawler/dao"
 )
 
@@ -44,8 +45,12 @@ func getChapters(URL string) {
 	c.Limit(&colly.LimitRule{
 		Parallelism: 5,
 	})
+	enableProxy(c)
 	d := c.Clone()
-
+	enableProxy(d)
+	d.Limit(&colly.LimitRule{
+		Parallelism: 5,
+	})
 	db, err := dao.GetDB()
 	if err != nil {
 		log.Fatalln(err)
@@ -116,6 +121,7 @@ func createNovel(URL string, boolChan chan novelcrawler.ErrorCode) {
 	var c = colly.NewCollector(
 		colly.AllowedDomains("www.piaotian.com", "piaotian.com", "piaotian.net", "www.piaotian.net"),
 		colly.CacheDir(tempDir))
+	enableProxy(c)
 	var remoteNovelExist bool
 	var firstChapter int
 	c.OnResponse(func(res *colly.Response) {
@@ -179,6 +185,13 @@ func modifyURL(URL *string) {
 	}
 }
 
+func enableProxy(c *colly.Collector) {
+	p, proxyErr := proxy.RoundRobinProxySwitcher("socks5://127.0.0.1:9050")
+	if proxyErr != nil {
+		panic(proxyErr)
+	}
+	c.SetProxyFunc(p);
+}
 func getNovelURI(URL string) string {
 	return novelURIRegex.FindString(URL)
 }
