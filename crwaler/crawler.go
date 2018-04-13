@@ -58,7 +58,7 @@ func getChapters(URL string) {
 	var chapter dao.Chapter
 	novel := dao.Novel{ID: getNovelURI(URL)}
 	db.First(&novel)
-	db.Where("novel_id = ?", novel.ID).Order("orders desc").First(&chapter)
+	db.Where("novel_id = ?", novel.ID).Order("id desc").First(&chapter)
 	chapterMap := make(map[int]*dao.Chapter)
 	// get chapters of novel
 	c.OnHTML("ul", func(e *colly.HTMLElement) {
